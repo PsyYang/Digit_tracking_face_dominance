@@ -1,0 +1,347 @@
+---
+title: "DGT_Time_LMM"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Preparations
+
+## Load the libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(lmerTest)
+library(car)
+library(emmeans)
+emmeans::emm_options(pbkrtest.limit = 12864, lmerTest.limit = 12864)
+```
+
+## Call the function
+
+```{r include=FALSE}
+source("compare_lmm_models.R")
+```
+
+# Adults
+
+```{r include=FALSE}
+adult_df <- read_csv('adult_data.csv')
+```
+
+## Face
+
+### Preprocess
+
+```{r include=FALSE}
+adult_face <- adult_df %>%
+  select(sub, image_no, gender, Time_face_h, Time_face_l) %>%
+  pivot_longer(
+    cols = c(Time_face_h, Time_face_l),
+    names_to = "dominance", 
+    values_to = "proportion_time"
+  ) %>%
+  mutate(dominance = case_when(
+    dominance == "Time_face_h" ~ "High",
+    dominance == "Time_face_l" ~ "Low"
+  ))
+```
+
+### Model comparisons
+
+```{r echo=FALSE}
+best_model_adult_face <- compare_lmm_models(
+  data = adult_face,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "dominance"),
+  random_vars = c("dominance"),
+  group_var = "sub"
+)
+```
+
+### The best model
+
+```{r echo=FALSE}
+summary(best_model_adult_face)
+Anova(best_model_adult_face, type = 'III')
+```
+
+
+### Post hoc
+
+```{r echo=FALSE}
+adult_pairs_dominance <- pairs(emmeans(best_model_adult_face, ~ dominance | gender), adjust = "tukey")
+summary(adult_pairs_dominance)
+adult_pairs_gender <- pairs(emmeans(best_model_adult_face, ~ gender | dominance), adjust = "tukey")
+summary(adult_pairs_gender)
+```
+
+### Plotting
+
+```{r echo=FALSE}
+cairo_pdf(
+  filename            = "Figure3a.pdf",  # change as needed
+  width               = 6,    # inches
+  height              = 4,    # inches
+  fallback_resolution = 600   # dpi for any bitmaps
+)
+
+ggplot(adult_face, aes(x=dominance, y=proportion_time, fill=gender)) +
+  geom_boxplot() +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0, 1) +
+  labs(y = "Mean Proportion of Time", x = "Dominance", fill = "Gender") +
+  scale_fill_discrete(labels = c("Female", "Male"))
+
+dev.off()
+
+```
+
+### Conclusion
+
+Two main effects (gender and dominance) and their interaction are significant. The preference for low dominance was only observed in female adults. The gender effect was only observed in high dominance faces.
+
+## ROI
+
+### Preprocess
+
+```{r include=FALSE}
+adult_ROI <- adult_df %>%
+  select(sub, image_no, gender, Time_eye_h, Time_eye_l, Time_nose_h, Time_nose_l) %>%
+  pivot_longer(
+    cols = starts_with("Time"),  # Targeting all columns that start with "Time"
+    values_to = "proportion_time",
+    names_to = c("region", "dominance"),  # Splitting the column names into two new columns
+    names_pattern = "^Time_(.*)_([hl])$"  # Regex to capture the region and dominance parts
+  ) %>%
+  mutate(
+    dominance = case_when(
+      dominance == "h" ~ "High",
+      dominance == "l" ~ "Low"
+    ),
+    region = case_when(
+      str_detect(region, "eye") ~ "Eyes",
+      str_detect(region, "nose") ~ "Nose-Mouth"
+    )
+  )
+```
+
+### Model comparisons
+
+```{r echo=FALSE}
+best_model_adult_ROI <- compare_lmm_models(
+  data = adult_ROI,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "dominance", "region"),
+  random_vars = c("dominance", "region"),
+  group_var = "sub"
+)
+
+```
+
+### The best model
+
+```{r echo=FALSE}
+summary(best_model_adult_ROI)
+Anova(best_model_adult_ROI, type = 'III')
+```
+
+### Post hoc
+
+```{r echo=FALSE}
+adult_ROI_pairs_dominance <- pairs(emmeans(best_model_adult_ROI, ~ dominance | gender), adjust = "tukey")
+summary(adult_ROI_pairs_dominance)
+adult_ROI_pairs_gender <- pairs(emmeans(best_model_adult_ROI, ~ gender | dominance), adjust = "tukey")
+summary(adult_ROI_pairs_gender)
+```
+
+### Plotting
+
+```{r echo=FALSE}
+cairo_pdf(
+  filename            = "Figure3b.pdf",  # change as needed
+  width               = 8,    # inches
+  height              = 4,    # inches
+  fallback_resolution = 600   # dpi for any bitmaps
+)
+
+ggplot(adult_ROI, aes(x=dominance, y=proportion_time, fill=gender)) +
+  geom_boxplot() +
+  facet_wrap(~ region) +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0,1) +
+  scale_fill_discrete(labels = c("Female", "Male")) +
+  labs(y = "Mean Proportion of Time", x = "Dominance", fill="Gender") 
+
+dev.off()
+```
+
+### Conclusion
+
+The region effect is significant (eyes > nose-mouth) and it doesn't interact with other factors.
+
+# Children
+
+```{r include=FALSE}
+# Read the CSV file, reading 'Age' as character temporarily
+child_df <- read_csv('Children_data.csv', col_types = cols(
+  Age = col_character()  # Specify Age to be read as character
+))
+
+# Check if 'age_group' column does not exist in the DataFrame
+if (!"age_group" %in% colnames(child_df)) {
+
+  child_df <- child_df %>%
+    mutate(Age = as.numeric(gsub(",", ".", Age)),
+           age_group = case_when(
+             Age < 6 ~ "4-5y",
+             Age >= 6 & Age < 7 ~ "6-7y",
+             Age >= 7 ~ "7-9y"
+             ))
+  write_csv(child_df, 'Children_data.csv')
+}
+
+```
+
+
+## Face
+
+### Preprocess
+
+```{r echo=FALSE}
+child_face <- child_df %>%
+  select(sub, image_no, gender, age_group, Time_face_h, Time_face_l) %>%
+  pivot_longer(
+    cols = c(Time_face_h, Time_face_l),
+    names_to = "dominance", 
+    values_to = "proportion_time"
+  ) %>%
+  mutate(dominance = case_when(
+    dominance == "Time_face_h" ~ "High",
+    dominance == "Time_face_l" ~ "Low"
+  ))
+```
+
+### Model comparisons
+
+```{r echo=FALSE}
+best_model_child_face <- compare_lmm_models(
+  data = child_face,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "dominance", "age_group"),
+  random_vars = c("dominance"),
+  group_var = "sub"
+)
+```
+
+### The best model
+
+```{r echo=FALSE}
+summary(best_model_child_face)
+Anova(best_model_child_face, type='II')
+```
+
+### Pairwise
+```{r}
+children_pairs_age <- pairs(emmeans(best_model_child_face, ~ age_group, adjust = "tukey"))
+summary(children_pairs_age)
+```
+
+
+### Plotting
+
+```{r echo=FALSE}
+cairo_pdf(
+  filename            = "Figure4a.pdf",  # change as needed
+  width               = 8,    # inches
+  height              = 4,    # inches
+  fallback_resolution = 600   # dpi for any bitmaps
+)
+
+ggplot(child_face, aes(x=age_group, y=proportion_time, fill=dominance)) +
+  geom_boxplot() +
+  facet_wrap(~gender, labeller = labeller(gender = c(M = "Male", F = "Female"))) +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0, 1) +
+  labs(y = "Mean Proportion of Time", x = "Age Group", fill = "Dominance")
+
+dev.off()
+```
+
+### Conclusion
+
+NO effect at all.
+
+## ROI
+
+### Preprocess
+
+```{r include=FALSE}
+child_ROI <- child_df %>%
+  select(sub, image_no, gender, age_group, Time_eye_h, Time_eye_l, Time_nose_h, Time_nose_l) %>%
+  pivot_longer(
+    cols = starts_with("Time"),  # Targeting all columns that start with "Time"
+    values_to = "proportion_time",
+    names_to = c("region", "dominance"),  # Splitting the column names into two new columns
+    names_pattern = "^Time_(.*)_([hl])$"  # Regex to capture the region and dominance parts
+  ) %>%
+  mutate(
+    dominance = case_when(
+      dominance == "h" ~ "High",
+      dominance == "l" ~ "Low"
+    ),
+    region = case_when(
+      str_detect(region, "eye") ~ "Eyes",
+      str_detect(region, "nose") ~ "Nose-Mouth"
+    )
+  )
+```
+
+### Model Comparisons
+
+```{r echo=FALSE}
+best_model_child_ROI <- compare_lmm_models(
+  data = child_ROI,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "age_group", "dominance", "region"),
+  random_vars = c("dominance", "region"),
+  group_var = "sub"
+)
+```
+
+### The best model
+
+```{r echo=FALSE}
+summary(best_model_child_ROI)
+Anova(best_model_child_ROI, type = 'II')
+```
+
+### Pairwise
+```{r}
+children_ROI_pairs_age <- pairs(emmeans(best_model_child_ROI, ~ age_group, adjust = "tukey"))
+summary(children_ROI_pairs_age)
+```
+
+### Plotting
+
+```{r echo=FALSE}
+cairo_pdf(
+  filename            = "Figure4b.pdf",  # change as needed
+  width               = 8,    # inches
+  height              = 8,    # inches
+  fallback_resolution = 600   # dpi for any bitmaps
+)
+
+ggplot(child_ROI, aes(x=age_group, y=proportion_time, fill=region)) +
+  geom_boxplot() +
+  facet_grid(gender~dominance, labeller = labeller(gender = c(M = "Male", F = "Female"))) +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0, 1) +
+  labs(y = "Mean Proportion of Time", x = "Age Group", fill = "Dominance")
+
+dev.off()
+```
+
+### Conclusion
+
+Still no dominance effect, but we found region effect (eyes > nose-mouth). We can argue that digit-tracking can capture certain effects but still we didn't find the dominance effect. We also find the age effect, which wasn't shown in the face analysis.

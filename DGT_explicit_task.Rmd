@@ -1,0 +1,273 @@
+---
+title: "Explicit task"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Data preparation
+
+## Load the libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(patchwork)
+library(lmerTest)
+library(car)
+```
+
+## Load the data
+
+Load the explicit task data
+
+**In three question columns, 0 means high dominance, 1 means low dominance.**
+
+```{r include=FALSE}
+explicit_df = read_csv('children_explicit.csv')
+explicit_df <- explicit_df %>%
+  mutate(across(.cols = tail(names(.), 3), ~ifelse(. == 7, 0, .)))
+```
+
+Check if there's missing trial. Then we found some subjects don't have 24 trials, but it's not a big deal.
+
+```{r echo=FALSE}
+# Check row counts for each Subject
+subject_counts <- explicit_df %>%
+  group_by(Subject) %>%
+  summarise(Count = n()) %>%
+  filter(Count != 24)
+
+# Print Subjects that do not have exactly 24 rows and their row counts
+print(subject_counts)
+
+```
+
+Load the first fix data
+
+```{r include=FALSE}
+child_df <- read_csv('Children_data.csv')
+children_fix <- child_df %>%
+  select(sub, gender, image_name, first_fix, age_group, Time_face_h, Time_face_l)
+```
+
+Combine two data frame together
+
+**Flip the code in the first fix column, 1 means low dominance now!**
+
+```{r include=FALSE}
+combined_df <- explicit_df %>%
+  inner_join(children_fix, by = c("Pic" = "image_name", "Subject" = "sub"))
+combined_df$first_fix <- ifelse(combined_df$first_fix == 0, 1, 0)
+```
+
+# First fix
+
+## Create contingency tables
+
+```{r echo=FALSE}
+table_Charge_Choice <- table(combined_df$`In charge`, combined_df$first_fix)
+table_Strength_Choice <- table(combined_df$Strong, combined_df$first_fix)
+table_Preference_Choice <- table(combined_df$Prefernce, combined_df$first_fix)
+
+print(table_Charge_Choice)
+print(table_Strength_Choice)
+print(table_Preference_Choice)
+
+```
+
+## Chi-squared tests
+
+```{r echo=FALSE}
+test_Charge_Choice <- chisq.test(table_Charge_Choice)
+test_Strength_Choice <- chisq.test(table_Strength_Choice)
+test_Preference_Choice <- chisq.test(table_Preference_Choice)
+
+# Print the results of the Chi-squared tests
+print(test_Charge_Choice)
+print(test_Strength_Choice)
+print(test_Preference_Choice)
+
+```
+
+## Plot
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Prepare data frames for plotting (make sure the tables are already converted to data frames)
+df_Charge_Choice <- as.data.frame(table_Charge_Choice)
+names(df_Charge_Choice) <- c("InCharge", "FirstFix", "Frequency")
+
+df_Strength_Choice <- as.data.frame(table_Strength_Choice)
+names(df_Strength_Choice) <- c("Strength", "FirstFix", "Frequency")
+
+df_Preference_Choice <- as.data.frame(table_Preference_Choice)
+names(df_Preference_Choice) <- c("Preference", "FirstFix", "Frequency")
+
+# Create the plots
+cairo_pdf(
+  filename            = "Figure6.pdf",
+  width               = 8,    # total width of the combined figure
+  height              = 10,   # total height of the combined figure
+  fallback_resolution = 600   # dpi for any raster elements
+)
+
+plot1 <- ggplot(data = df_Charge_Choice, aes(x = InCharge, y = Frequency, fill = FirstFix)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Which person would you like to be in charge?",
+       y = "Frequency",
+       fill = "First Touch") +
+  scale_x_discrete(labels = c("High", "Low")) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4"), labels = c("High", "Low"))
+
+plot2 <- ggplot(data = df_Strength_Choice, aes(x = Strength, y = Frequency, fill = FirstFix)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Which person looks stronger?",
+       y = "Frequency",
+       fill = "First Touch") +
+  scale_x_discrete(labels = c("High", "Low")) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4"), labels = c("High", "Low"))
+
+plot3 <- ggplot(data = df_Preference_Choice, aes(x = Preference, y = Frequency, fill = FirstFix)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Which person do you prefer?",
+       y = "Frequency",
+       fill = "First Touch") +
+  scale_x_discrete(labels = c("High", "Low")) +
+  scale_fill_manual(values = c("#F8766D", "#00BFC4"), labels = c("High", "Low"))
+
+
+# Combine and set relative heights
+combined_plot <- plot1 + plot2 + plot3 +
+  plot_layout(ncol = 1, heights = c(4, 4, 4))
+
+# Print the combined plot
+print(combined_plot)
+
+dev.off()
+
+```
+
+## Conclusion
+
+Although one of the chi-square test is significant, we can conclude that the choice in the explicit tasks didn't affect the first touch choice in the exploration.
+
+# Time
+
+Since there's no dominance effect in children data, we want to check if the explicit choices have an effect, so we just replicate the LMM analysis by using the explicit answers instead of dominance.
+
+## Call the function
+
+```{r include=FALSE}
+source("compare_lmm_models.R")
+```
+
+## Preference
+
+```{r include=FALSE}
+preference_df <- combined_df %>%
+  select(Subject, Pic, gender, age_group, Prefernce, Time_face_l, Time_face_h) %>%
+  mutate(
+    Time_face_preferred = if_else(Prefernce == 1, Time_face_l, Time_face_h),
+    Time_face_not_preferred = if_else(Prefernce == 1, Time_face_h, Time_face_l)
+  ) %>%
+  select(-Prefernce, -Time_face_h, -Time_face_l) %>%
+  pivot_longer(
+    cols = c(Time_face_preferred, Time_face_not_preferred),
+    names_to = "preference", 
+    values_to = "proportion_time"
+  ) %>%
+  mutate(preference = case_when(
+    preference == "Time_face_preferred" ~ "Yes",
+    preference == "Time_face_not_preferred" ~ "No"
+  ))
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+best_model_preference <- compare_lmm_models(
+  data = preference_df,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "preference", "age_group"),
+  random_vars = c("preference"),
+  group_var = "Subject"
+)
+```
+
+```{r echo=FALSE, message=TRUE, warning=TRUE}
+summary(best_model_preference)
+Anova(best_model_preference, type = 'II')
+```
+
+## In charge
+
+```{r include=FALSE}
+charge_df <- combined_df %>%
+  select(Subject, Pic, gender, age_group, `In charge`, Time_face_l, Time_face_h) %>%
+  mutate(
+    Time_face_in_charge = if_else(`In charge` == 1, Time_face_l, Time_face_h),
+    Time_face_no_charge = if_else(`In charge` == 1, Time_face_h, Time_face_l)
+  ) %>%
+  select(-`In charge`, -Time_face_h, -Time_face_l) %>%
+  pivot_longer(
+    cols = c(Time_face_in_charge, Time_face_no_charge),
+    names_to = "in_charge", 
+    values_to = "proportion_time"
+  ) %>%
+  mutate(preference = case_when(
+    in_charge == "Time_face_in_charge" ~ "Yes",
+    in_charge == "Time_face_no_charge" ~ "No"
+  ))
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+best_model_charge <- compare_lmm_models(
+  data = charge_df,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "in_charge", "age_group"),
+  random_vars = c("in_charge"),
+  group_var = "Subject"
+)
+```
+
+```{r echo=FALSE}
+summary(best_model_charge)
+Anova(best_model_charge, type = 'II')
+```
+
+## Strength
+
+```{r include=FALSE}
+strength_df <- combined_df %>%
+  select(Subject, Pic, gender, age_group, Strong, Time_face_l, Time_face_h) %>%
+  mutate(
+    Time_face_strong= if_else(Strong == 1, Time_face_l, Time_face_h),
+    Time_face_weak = if_else(Strong == 1, Time_face_h, Time_face_l)
+  ) %>%
+  select(-Strong, -Time_face_h, -Time_face_l) %>%
+  pivot_longer(
+    cols = c(Time_face_strong, Time_face_weak),
+    names_to = "strength", 
+    values_to = "proportion_time"
+  ) %>%
+  mutate(preference = case_when(
+    strength == "Time_face_strong" ~ "High",
+    strength == "Time_face_weak" ~ "Low"
+  ))
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+best_model_strength <- compare_lmm_models(
+  data = strength_df,
+  dv = "proportion_time",
+  fixed_effects = c("gender", "strength", "age_group"),
+  random_vars = c("strength"),
+  group_var = "Subject"
+)
+```
+
+```{r echo=FALSE, warning=FALSE}
+summary(best_model_strength)
+Anova(best_model_strength, type = 'II')
+```
+
+## Conclusion
+
+We replace the dominance with three explicit choice variables, but none of them has an effect, so the explicit choice can't predict the exploration time either.

@@ -1,0 +1,157 @@
+---
+title: "DGT children first fix"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Data preparation
+
+## Load the libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+## Load adults and children data
+
+```{r include=FALSE}
+child_df <- read_csv('Children_data.csv')
+adult_df <- read_csv('adult_data.csv')
+```
+
+
+Print the number of subjects in each group.
+
+```{r}
+child_df %>%
+  group_by(age_group, gender) %>%
+  summarise(n_distinct(sub))
+```
+
+Print their mean age.
+```{r}
+child_df %>%
+  group_by(age_group) %>%
+  summarise(avg_age = mean(Age), sd_age = sd(Age))
+```
+
+
+## Preprocess the data
+
+```{r include=FALSE}
+children_fix <- child_df %>%
+  select(sub, gender, image_no, first_fix, age_group)
+```
+```{r include=FALSE}
+adult_fix <- adult_df %>%
+  select(sub, gender, image_no, first_fix) %>%
+  mutate(age_group = 'Adults')
+```
+
+## Combine the data
+
+Flip the code of dominance, now 1 means choosing the low dominance
+
+```{r include=FALSE}
+combined_df <- bind_rows(adult_fix, children_fix)
+# flip the code of dominance, now 1 means choosing the low dominance
+combined_df$first_fix <- ifelse(combined_df$first_fix == 0, 1, 0)
+combined_df <- combined_df %>%
+  mutate(across(everything(), factor))
+```
+
+# Plot the data
+
+## Compute the percentage
+
+```{r include=FALSE}
+sub_data <- combined_df %>%
+  group_by(sub, age_group, gender) %>%
+  summarise(Percentage = mean(first_fix==1), .groups = 'drop')
+```
+## The box plot
+
+```{r}
+# 1) Open a PDF device (vector) with 600 dpi fallback
+cairo_pdf(
+  filename            = "Figure5.pdf",  # change as needed
+  width               = 6,    # inches
+  height              = 4,    # inches
+  fallback_resolution = 600   # dpi for any bitmaps
+)
+
+# 2) Your plot
+ggplot(sub_data, aes(x = age_group, y = Percentage, fill = gender)) +
+  geom_boxplot() +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0, 1) +
+  scale_fill_discrete(labels = c("Female", "Male")) +
+  labs(
+    x    = "Age Group",
+    y    = "Percentage of First Touch on Low Dominance",
+    fill = "Gender"
+  ) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black")
+
+# 3) Close the device and write the file
+dev.off()
+
+```
+
+# Linear Mixed Models
+
+## Model comparisons
+
+Gender and age are normally fixed effects, so we use subject as the random intercept. We didn't include image id in the model because those images are computer-generated and are very similar.
+
+```{r}
+# Model with random intercepts for subjects
+model1 <- glmer(first_fix ~ gender + age_group + (1 | sub), family = binomial(link = "logit"), data = combined_df)
+
+# Model with random intercepts and possible interactions
+model2 <- glmer(first_fix ~ gender * age_group + (1 | sub), family = binomial(link = "logit"), data = combined_df)
+
+```
+
+The model adding the interaction is better.
+
+```{r echo=FALSE}
+anova(model1, model2)
+```
+
+Then we looked at the results.
+
+```{r echo=FALSE}
+summary(model2)
+```
+
+Print an anova-style table.
+
+```{r echo=FALSE}
+Anova(model2, type='III')
+```
+
+## Post hoc
+
+```{r echo=FALSE}
+# Get EMMs for gender within each level of age
+emm_gender <- emmeans(model2, ~ gender | age_group)
+
+# Pairwise comparisons within each age group
+pairs_gender <- pairs(emm_gender, adjust = "tukey")
+summary(pairs_gender)
+```
+
+```{r echo=FALSE}
+# Get EMMs for age within each level of gender
+emm_age <- emmeans(model2, ~ age_group | gender)
+
+# Pairwise comparisons within each gender
+pairs_age <- pairs(emm_age, adjust = "tukey")
+summary(pairs_age)
+```
+

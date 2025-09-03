@@ -1,0 +1,114 @@
+---
+title: "FWHR"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Load the libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(cowplot)
+```
+
+# Read all the files
+
+```{r include=FALSE}
+adult_df <- read_csv('adult_data.csv')
+child_df <- read_csv('children_data.csv')
+fwhr_df <- read_csv('FWHR_data.csv')
+```
+
+# Preprocess the data
+
+Modify the FWHR file to allow us to join it with the data
+
+```{r include=FALSE}
+fwhr_df <- fwhr_df %>%
+  # Use separate to split the image_name into three parts
+  separate(col = image_name, into = c("prefix", "image_no", "suffix"), sep = "_", remove = FALSE) %>%
+  # Convert image_no from character to numeric
+  mutate(image_no = as.numeric(image_no)) %>%
+  # Optionally, remove the temporary columns if they are not needed
+  select(-prefix, -suffix)
+```
+
+Clean and summarize the adult data, we compute the time difference in high and low dominance for each trial, then compute the mean value for each trial. Then we average the time difference and the first fix group by image.
+
+```{r include=FALSE}
+adult_df %>%
+  mutate(time_diff = Time_face_h - Time_face_l) %>%
+  select(image_no, time_diff, first_fix) %>%
+  group_by(image_no) %>%
+  summarise(mean_tf=mean(time_diff), mean_ff=mean(first_fix)) %>%
+  left_join(fwhr_df, by='image_no') -> adult_sum
+```
+
+The same to children data.
+
+```{r include=FALSE}
+child_df %>%
+  mutate(time_diff = Time_face_h - Time_face_l) %>%
+  select(image_no, time_diff, first_fix) %>%
+  group_by(image_no) %>%
+  summarise(mean_tf=mean(time_diff), mean_ff=mean(first_fix)) %>%
+  left_join(fwhr_df, by='image_no') -> child_sum
+```
+
+# Plotting
+
+```{r echo=FALSE}
+# Creating a histogram of FWHR_diff1
+ggplot(fwhr_df, aes(x = FWHR_diff1)) +
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black") +
+  labs(x = "Difference of FWHR between two faces",
+       y = "Frequency") 
+
+```
+
+**In each image, the high dominance face has a higher FWHR.**
+
+```{r include=FALSE}
+create_cor_plot <- function(data, x_var, y_var, title = "", x_lab = "", y_lab = "") {
+  test_results <- cor.test(data[[x_var]], data[[y_var]], method = "pearson")
+  corr_coef <- round(test_results$estimate, 3)
+  p_value <- signif(test_results$p.value, digits = 3)
+
+  plot <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +
+    annotate("text", x = Inf, y = Inf, label = paste("R =", corr_coef, "\np =", p_value),
+             hjust = 1.1, vjust = 1.1, size = 5, color = "red") +
+    labs(title = title, x = x_lab, y = y_lab) +
+    theme(plot.title = element_text(hjust = 0.5))
+
+  return(plot)
+}
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Generate each plot with titles and axis labels
+plot1 <- create_cor_plot(adult_sum, "mean_tf", "FWHR_diff1", 
+                         title = "Adults Mean Time ", 
+                         x_lab = "Mean Time Difference", y_lab = "Difference of FWHR")
+plot2 <- create_cor_plot(adult_sum, "mean_ff", "FWHR_diff1", 
+                         title = "Adults Mean First touch", 
+                         x_lab = "Proportion of first touch on high dominance face", y_lab = "Difference of FWHR")
+plot3 <- create_cor_plot(child_sum, "mean_tf", "FWHR_diff1", 
+                         title = "Child Mean Time", 
+                         x_lab = "Mean Time Difference", y_lab = "Difference of FWHR")
+plot4 <- create_cor_plot(child_sum, "mean_ff", "FWHR_diff1", 
+                         title = "Children Mean First Touch", 
+                         x_lab = "Proportion of first touch on high dominance face", y_lab = "Difference of FWHR")
+
+# Combine the plots in a 2x2 grid
+combined_plots <- plot_grid(plot1, plot2, plot3, plot4, ncol = 2, nrow = 2)  # Using plot_grid for a 2x2 layout
+
+# Print the combined plot
+print(combined_plots)
+
+```
+
+**The response of adults are correlated with the facial width to height ratio. However, the responses of children are neither negatively correlated or uncorrelated with FWHR.**
