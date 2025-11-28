@@ -227,10 +227,10 @@ end
 
 %% show four maps together
 clear all
-% 0) Create a new figure sized to your needs (in inches)
-h = figure('Units','inches','Position',[1 1 8 6]);  % 8"¡Á6"
+% 0) Create a new figure 
+h = figure('Units','inches','Position',[1 1 8 6]);  
 
-% 1) Your subplots
+% 1) Subplots
 subplot(2,2,1);
 load('children_group1.mat');
 imagesc(children_map_norm);
@@ -258,7 +258,7 @@ set(gca,'XTick',[],'YTick',[]);
 % 2) Ensure the vector renderer for the figure
 set(h, 'Renderer', 'painters');
 
-% 3) Match paper size to on©\screen size
+% 3) Match paper size to screen size
 set(h, 'PaperUnits',   'inches', ...
        'PaperPosition', [0 0 8 6]);
 
@@ -267,8 +267,3 @@ print(h, 'Figure2a.pdf', '-dpdf', '-r600');
 
 
 
-% % 4b) If you¡¯d rather EPS:
-% print(h, 'children_comparison.eps', '-depsc2', '-r600');
-% 
-% % 4c) Or SVG:
-% print(h, 'children_comparison.svg', '-dsvg', '-r600');

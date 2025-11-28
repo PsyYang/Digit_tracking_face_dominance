@@ -78,13 +78,13 @@ sub_data <- combined_df %>%
 ```{r}
 # 1) Open a PDF device (vector) with 600 dpi fallback
 cairo_pdf(
-  filename            = "Figure5.pdf",  # change as needed
+  filename            = "Figure5.pdf", 
   width               = 6,    # inches
   height              = 4,    # inches
   fallback_resolution = 600   # dpi for any bitmaps
 )
 
-# 2) Your plot
+# 2) The plot
 ggplot(sub_data, aes(x = age_group, y = Percentage, fill = gender)) +
   geom_boxplot() +
   stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
