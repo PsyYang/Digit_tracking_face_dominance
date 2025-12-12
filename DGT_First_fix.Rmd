@@ -143,15 +143,75 @@ emm_gender <- emmeans(model2, ~ gender | age_group)
 
 # Pairwise comparisons within each age group
 pairs_gender <- pairs(emm_gender, adjust = "tukey")
-summary(pairs_gender)
+
+pairs_tab <- summary(pairs_gender, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm_gender,
+                    sigma = sigma(model2),
+                    edf   = df.residual(model2)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_gender <- merge(
+  pairs_tab,
+  eff_tab[, c("age_group", "contrast", "effect.size")],
+  by = c("age_group", "contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+comparisons_gender
+```
+```{r echo=FALSE}
+# EMMs on link scale (default)
+emm_gender <- emmeans(model2, ~ gender | age_group)
+
+# Pairwise comparisons (link scale): gives estimate, SE, z, p (Tukey-adjusted)
+pairs_link <- pairs(emm_gender, adjust = "tukey")
+
+pairs_tab <- summary(pairs_link, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+# Same comparisons on response scale: gives OR
+pairs_resp <- summary(pairs_link, type = "response", infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+# Pick the response-scale columns you want
+# For logistic: odds.ratio / ratio; for Poisson: rate.ratio / ratio
+resp_keep <- pairs_resp |>
+  select(age_group, odds.ratio)
+
+# Merge: keep z-test table + add OR/IRR
+comparisons_gender <- pairs_tab |>
+  left_join(resp_keep, by = c("age_group")) |>
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+comparisons_gender
 ```
 
 ```{r echo=FALSE}
-# Get EMMs for age within each level of gender
+# EMM and pairwise comparisons
 emm_age <- emmeans(model2, ~ age_group | gender)
 
-# Pairwise comparisons within each gender
-pairs_age <- pairs(emm_age, adjust = "tukey")
-summary(pairs_age)
+
+# Pairwise comparisons (link scale): gives estimate, SE, z, p (Tukey-adjusted)
+pairs_link <- pairs(emm_age, adjust = "tukey")
+
+pairs_tab <- summary(pairs_link, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+# Same comparisons on response scale: gives OR
+pairs_resp <- summary(pairs_link, type = "response", infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+
+
+# Merge: keep z-test table + add OR/IRR
+comparisons_age <- pairs_tab |>
+  mutate(OR = pairs_resp$odds.ratio) |>
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+comparisons_age
 ```
+
 

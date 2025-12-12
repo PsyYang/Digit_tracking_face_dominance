@@ -70,10 +70,48 @@ Anova(best_model_adult_face, type = 'III')
 ### Post hoc
 
 ```{r echo=FALSE}
-adult_pairs_dominance <- pairs(emmeans(best_model_adult_face, ~ dominance | gender), adjust = "tukey")
-summary(adult_pairs_dominance)
-adult_pairs_gender <- pairs(emmeans(best_model_adult_face, ~ gender | dominance), adjust = "tukey")
-summary(adult_pairs_gender)
+emm = emmeans(best_model_adult_face, ~ dominance | gender)
+adult_pairs_dominance <- pairs(emm, adjust = "tukey")
+
+pairs_tab <- summary(adult_pairs_dominance, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm,
+                    sigma = sigma(best_model_adult_face),
+                    edf   = df.residual(best_model_adult_face)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_adult_dominance <- merge(
+  pairs_tab,
+  eff_tab[, c("gender", "contrast", "effect.size")],
+  by = c("gender", "contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+comparisons_adult_dominance
+```
+```{r echo=FALSE}
+emm = emmeans(best_model_adult_face, ~ gender | dominance )
+adult_pairs_gender <- pairs(emm, adjust = "tukey")
+
+pairs_tab <- summary(adult_pairs_gender, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm,
+                    sigma = sigma(best_model_adult_face),
+                    edf   = df.residual(best_model_adult_face)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_adult_gender <- merge(
+  pairs_tab,
+  eff_tab[, c("dominance", "contrast", "effect.size")],
+  by = c("dominance", "contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+comparisons_adult_gender
 ```
 
 ### Plotting
@@ -147,13 +185,52 @@ Anova(best_model_adult_ROI, type = 'III')
 ```
 
 ### Post hoc
+```{r echo=FALSE}
+emm = emmeans(best_model_adult_ROI, ~ dominance | gender)
+adult_pairs_dominance <- pairs(emm, adjust = "tukey")
+
+pairs_tab <- summary(adult_pairs_dominance, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm,
+                    sigma = sigma(best_model_adult_ROI),
+                    edf   = df.residual(best_model_adult_ROI)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_adult_dominance <- merge(
+  pairs_tab,
+  eff_tab[, c("gender", "contrast", "effect.size")],
+  by = c("gender", "contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+comparisons_adult_dominance
+```
 
 ```{r echo=FALSE}
-adult_ROI_pairs_dominance <- pairs(emmeans(best_model_adult_ROI, ~ dominance | gender), adjust = "tukey")
-summary(adult_ROI_pairs_dominance)
-adult_ROI_pairs_gender <- pairs(emmeans(best_model_adult_ROI, ~ gender | dominance), adjust = "tukey")
-summary(adult_ROI_pairs_gender)
+emm = emmeans(best_model_adult_ROI, ~ gender | dominance )
+adult_pairs_gender <- pairs(emm, adjust = "tukey")
+
+pairs_tab <- summary(adult_pairs_gender, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm,
+                    sigma = sigma(best_model_adult_ROI),
+                    edf   = df.residual(best_model_adult_ROI)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_adult_gender <- merge(
+  pairs_tab,
+  eff_tab[, c("dominance", "contrast", "effect.size")],
+  by = c("dominance", "contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+comparisons_adult_gender
 ```
+
 
 ### Plotting
 
@@ -317,10 +394,31 @@ Anova(best_model_child_ROI, type = 'II')
 ```
 
 ### Pairwise
-```{r}
-children_ROI_pairs_age <- pairs(emmeans(best_model_child_ROI, ~ age_group, adjust = "tukey"))
-summary(children_ROI_pairs_age)
+```{r echo=FALSE}
+emm = emmeans(best_model_child_ROI, ~ age_group)
+children_pairs_age <- pairs(emm, adjust = "tukey")
+
+pairs_tab <- summary(children_pairs_age, infer = c(TRUE, TRUE)) |>
+  as.data.frame()
+
+eff_tab <- eff_size(emm,
+                    sigma = sigma(best_model_child_ROI),
+                    edf   = df.residual(best_model_child_ROI)) |>
+  summary() |>
+  as.data.frame() 
+
+comparisons_children_age <- merge(
+  pairs_tab,
+  eff_tab[, c("contrast", "effect.size")],
+  by = c("contrast"),
+  all.x = TRUE
+) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+comparisons_children_age
 ```
+
+
 
 ### Plotting
 
