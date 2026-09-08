@@ -1,0 +1,140 @@
+---
+title: "DGT touch bias"
+output: html_notebook
+---
+
+# Data preparation
+
+## Load the libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+## Load adults and children data
+
+```{r include=FALSE}
+child_df <- read_csv('Children_data.csv')
+adult_df <- read_csv('adult_data.csv')
+```
+
+
+## Preprocess the data
+
+```{r include=FALSE}
+child_df <- child_df %>%
+  mutate(
+    right_fix = case_when(
+      direction == '17' & first_fix == 0 ~ 0,
+      direction == '17' & first_fix == 1 ~ 1,
+      direction == '71' & first_fix == 1 ~ 0,
+      direction == '71' & first_fix == 0 ~ 1
+    )
+  )
+```
+
+```{r include=FALSE}
+adult_df <- adult_df %>%
+  mutate(
+    right_fix = case_when(
+      direction == '17' & first_fix == 0 ~ 0,
+      direction == '17' & first_fix == 1 ~ 1,
+      direction == '71' & first_fix == 1 ~ 0,
+      direction == '71' & first_fix == 0 ~ 1
+    )
+  )
+```
+
+```{r include=FALSE}
+children_fix <- child_df %>%
+  select(sub, gender, image_no, right_fix, age_group)
+
+adult_fix <- adult_df %>%
+  select(sub, gender, image_no, right_fix) %>%
+  mutate(age_group = 'Adults') %>%
+  mutate(sub = sub + 500)
+
+combined_df <- bind_rows(adult_fix, children_fix)
+```
+
+# Plot the data
+
+## Compute the percentage
+
+```{r include=FALSE}
+sub_data <- combined_df %>%
+  group_by(sub, age_group, gender) %>%
+  summarise(Percentage = mean(right_fix==1), .groups = 'drop')
+```
+## The box plot
+
+```{r}
+
+ggplot(sub_data, aes(x = age_group, y = Percentage, fill = gender)) +
+  geom_boxplot() +
+  stat_summary(fun=mean, geom="point", color="green", size=3, shape=18, position=position_dodge(width=0.75)) +
+  ylim(0, 1) +
+  scale_fill_discrete(labels = c("Female", "Male")) +
+  labs(
+    x    = "Age Group",
+    y    = "Percentage of First Touch on Right Face",
+    fill = "Gender"
+  ) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black")
+```
+
+# LMM
+```{r}
+
+# Fit Model 1: Additive model (without interaction)
+model1_right <- glmer(right_fix ~ gender + age_group + (1 | sub), 
+                      family = binomial(link = "logit"), 
+                      data = combined_df)
+
+# Fit Model 2: Interaction model
+model2_right <- glmer(right_fix ~ gender * age_group + (1 | sub), 
+                      family = binomial(link = "logit"), 
+                      data = combined_df)
+
+# Compare candidate models using Likelihood Ratio Test
+anova(model1_right, model2_right)
+```
+```{r}
+emm <- emmeans(model1_right, ~ gender + age_group, type = "response")
+test(emm, null = 0, type = "logit", p.adjust = "bonferroni")
+```
+
+
+# T-tests
+```{r}
+# Step 1: Calculate the proportion of rightward choices for each subject
+sub_summary <- combined_df %>%
+  group_by(sub, gender, age_group) %>%
+  summarise(
+    right_ratio = mean(right_fix, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Step 2: Perform one-sample t-tests against 0.5 (chance level) for each subgroup
+right_bias_results <- sub_summary %>%
+  group_by(age_group, gender) %>%
+  summarise(
+    n = n(),
+    mean_ratio = mean(right_ratio, na.rm = TRUE),
+    sd_ratio = sd(right_ratio, na.rm = TRUE),
+    t_stat = t.test(right_ratio, mu = 0.5)$statistic,
+    df = t.test(right_ratio, mu = 0.5)$parameter,
+    p_val = t.test(right_ratio, mu = 0.5)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj_bonf = p.adjust(p_val, method = "bonferroni") # Apply Bonferroni correction
+  )
+
+# View the test results
+print(right_bias_results)
+```
+
